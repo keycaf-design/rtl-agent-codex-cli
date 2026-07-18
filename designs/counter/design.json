@@ -3,6 +3,7 @@
   "top_module": "counter",
   "rtl_filename": "counter.sv",
   "tb_filename": "counter_tb.sv",
+  "tb_top_module": "counter_tb",
   "spec_file": "spec.md",
   "testplan_file": "testplan.md",
   "max_repair_attempts": 3

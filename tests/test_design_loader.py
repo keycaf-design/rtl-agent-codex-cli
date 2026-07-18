@@ -17,12 +17,14 @@ class DesignLoaderTests(unittest.TestCase):
         data.update(updates)
         (root / "design.json").write_text(json.dumps(data), encoding="utf-8")
         (root / "spec.md").write_text("A useful specification.\n", encoding="utf-8")
+        (root / "testplan.md").write_text("Check useful behavior.\n", encoding="utf-8")
         return root
 
     def test_loads_valid_design(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             config = load_design_config(self._design(Path(name)))
             self.assertEqual(config.top_module, "demo")
+            self.assertEqual(config.tb_top_module, "demo_tb")
 
     def test_rejects_parent_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as name:

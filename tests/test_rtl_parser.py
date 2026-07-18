@@ -1,6 +1,6 @@
 import unittest
 
-from rtl_agent.tools.rtl_parser import RTLParseError, extract_rtl
+from rtl_agent.tools.rtl_parser import RTLParseError, extract_rtl, extract_testbench
 
 
 class RTLParserTests(unittest.TestCase):
@@ -15,6 +15,15 @@ class RTLParserTests(unittest.TestCase):
     def test_wrong_top_raises(self) -> None:
         with self.assertRaisesRegex(RTLParseError, "Requested top module"):
             extract_rtl("module other; endmodule", "demo")
+
+    def test_testbench_rejects_multiple_modules(self) -> None:
+        response = "module helper; endmodule\nmodule demo_tb; demo dut(); endmodule"
+        with self.assertRaisesRegex(RTLParseError, "exactly one"):
+            extract_testbench(response, "demo_tb", "demo")
+
+    def test_testbench_requires_dut_name(self) -> None:
+        with self.assertRaisesRegex(RTLParseError, "DUT module name"):
+            extract_testbench("module demo_tb; endmodule", "demo_tb", "demo")
 
 
 if __name__ == "__main__":

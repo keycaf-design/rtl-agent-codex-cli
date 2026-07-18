@@ -18,11 +18,13 @@ class DesignConfig:
     top_module: str
     rtl_filename: str
     tb_filename: str
+    tb_top_module: str
     spec_file: str
     testplan_file: str
     max_repair_attempts: int
     design_dir: Path
     spec: str
+    testplan: str
 
 
 _REQUIRED = (
@@ -61,16 +63,25 @@ def load_design_config(design_dir: Path | str) -> DesignConfig:
         if not isinstance(data[field], str) or not data[field].strip():
             raise DesignConfigError(f"{field} must be a non-empty string")
     filenames = {field: _safe_filename(data[field], field) for field in _FILE_FIELDS}
+    tb_top_module = data.get("tb_top_module", Path(filenames["tb_filename"]).stem)
+    if not isinstance(tb_top_module, str) or not tb_top_module.strip():
+        raise DesignConfigError("tb_top_module must be a non-empty string")
+    if PurePath(tb_top_module).name != tb_top_module or ".." in PurePath(tb_top_module).parts:
+        raise DesignConfigError("tb_top_module must not contain a path")
     spec_path = directory / filenames["spec_file"]
+    testplan_path = directory / filenames["testplan_file"]
     try:
         spec = read_nonempty_text(spec_path)
+        testplan = read_nonempty_text(testplan_path)
     except (OSError, ValueError) as exc:
-        raise DesignConfigError(f"Invalid spec file: {exc}") from exc
+        raise DesignConfigError(f"Invalid design input file: {exc}") from exc
     return DesignConfig(
         design_name=data["design_name"].strip(),
         top_module=data["top_module"].strip(),
+        tb_top_module=tb_top_module.strip(),
         max_repair_attempts=int(data["max_repair_attempts"]),
         design_dir=directory,
         spec=spec,
+        testplan=testplan,
         **filenames,
     )

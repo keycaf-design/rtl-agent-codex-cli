@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 runs/*
 !runs/.gitkeep
+obj_dir/
 .env
 .env.*
 *.secret

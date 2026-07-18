@@ -1,0 +1,5 @@
+Generate exactly one complete SystemVerilog self-checking testbench module and return only its source code. Do not return Markdown fences, explanations, patches, or diffs.
+
+Keep the requested testbench module name and instantiate the DUT using its exact module name and public port interface. Do not change the DUT or access DUT internal signals through hierarchical references. Execute every required test-plan scenario using deterministic tests. At each check, compare expected and actual values; on mismatch print an informative error including TEST_FAIL and call `$fatal(1)`. After every check succeeds, print exactly TEST_PASS and call `$finish`. Add a finite timeout watchdog that prints TEST_FAIL and terminates with `$fatal(1)` to prevent an infinite simulation.
+
+The testbench need not be synthesizable. Do not use UVM, classes, DPI, or external file dependencies. Use syntax supported by Verilator `--binary --timing`. Do not weaken the specification, omit tests, or modify the DUT to make tests pass.
