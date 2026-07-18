@@ -41,3 +41,20 @@ def extract_testbench(response: str, tb_top_module: str, dut_top_module: str) ->
             f"DUT module name '{dut_top_module}' was not found in the testbench"
         )
     return testbench
+
+
+def module_interface(source: str, module_name: str) -> str:
+    """Return a whitespace-normalized module declaration through its first semicolon."""
+    match = re.search(
+        rf"\bmodule\s+{re.escape(module_name)}\b(?P<header>.*?);",
+        source,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        raise RTLParseError(f"Module interface for '{module_name}' was not found")
+    return re.sub(r"\s+", " ", match.group(0)).strip()
+
+
+def require_same_interface(before: str, after: str, module_name: str) -> None:
+    if module_interface(before, module_name) != module_interface(after, module_name):
+        raise RTLParseError(f"Repair changed public interface of module '{module_name}'")

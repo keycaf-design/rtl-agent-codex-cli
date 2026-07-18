@@ -6,6 +6,7 @@ from pathlib import Path
 from rtl_agent.backends.codex_cli import CodexCLIBackend
 from rtl_agent.workflows.generate_rtl import generate_rtl
 from rtl_agent.workflows.generate_testbench import generate_testbench
+from rtl_agent.workflows.repair_simulation import repair_simulation
 from rtl_agent.workflows.simulate import simulate_design
 from rtl_agent.workflows.verify_rtl import verify_rtl
 
@@ -23,6 +24,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate_tb.add_argument("--design", required=True, type=Path, help="design input directory")
     simulate = subparsers.add_parser("simulate", help="compile and run RTL simulation")
     simulate.add_argument("--design", required=True, type=Path, help="design input directory")
+    repair_sim = subparsers.add_parser(
+        "repair-sim", help="classify and safely repair simulation failures"
+    )
+    repair_sim.add_argument("--design", required=True, type=Path, help="design input directory")
     return parser
 
 
@@ -72,6 +77,21 @@ def main() -> int:
                     print(f"Primary error: {result.primary_error}")
                 print("Full compiler output is saved in the compile log.")
             return 0 if result.final_result == "PASS" else 1
+        if args.command == "repair-sim":
+            backend = CodexCLIBackend(project_dir=project_root)
+            result = repair_simulation(backend, args.design, project_root)
+            print(f"Design: {result.design_name}")
+            print(f"Initial simulation: {'PASS' if result.initial_failure_category is None and result.passed else 'FAIL'}")
+            if result.initial_failure_category:
+                print(f"Failure category: {result.initial_failure_category}")
+            print(f"Repair attempts: {result.total_attempts}")
+            print(f"RTL repairs: {result.rtl_repair_attempts}")
+            print(f"Testbench repairs: {result.testbench_repair_attempts}")
+            print(f"Final simulation: {'PASS' if result.passed else 'FAIL'}")
+            print(f"Final result: {'PASS' if result.passed else 'FAIL'}")
+            if result.error_message:
+                print(f"Reason: {result.error_message}")
+            return 0 if result.passed else 1
     except Exception as exc:
         print(f"RTL command failed: {exc}")
         return 1

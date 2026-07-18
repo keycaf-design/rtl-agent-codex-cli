@@ -39,6 +39,18 @@ class DesignLoaderTests(unittest.TestCase):
             with self.assertRaises(DesignConfigError):
                 load_design_config(directory)
 
+    def test_simulation_repair_limit_defaults_and_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            config = load_design_config(self._design(Path(name)))
+            self.assertEqual(config.max_simulation_repair_attempts, 3)
+        for value in (-1, 11, True, "3"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as name:
+                directory = self._design(
+                    Path(name), max_simulation_repair_attempts=value
+                )
+                with self.assertRaises(DesignConfigError):
+                    load_design_config(directory)
+
 
 if __name__ == "__main__":
     unittest.main()
