@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import time
@@ -61,12 +62,20 @@ def run_verilator_simulation(
     _validate_build_directory(build_path)
     if shutil.which("verilator") is None:
         raise SimulatorNotFoundError("Verilator was not found on PATH")
+    compiler_setting = os.environ.get("CXX", "g++")
+    compiler_parts = shlex.split(compiler_setting)
+    compiler = compiler_parts[0] if compiler_parts else "g++"
+    if shutil.which(compiler) is None:
+        raise SimulatorNotFoundError(
+            f"C++ compiler '{compiler}' was not found on PATH; "
+            "Verilator --binary requires a C++ toolchain"
+        )
     if build_path.exists():
         shutil.rmtree(build_path)
     build_path.mkdir(parents=True)
 
     compile_command = [
-        "verilator", "--binary", "--timing", "--Wall",
+        "verilator", "--binary", "--timing", "--Wall", "-Wno-fatal",
         "--top-module", tb_top_module, "--Mdir", str(build_path),
         str(rtl_path), str(tb_path),
     ]

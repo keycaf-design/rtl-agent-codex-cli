@@ -65,6 +65,12 @@ def main() -> int:
             print(f"Final result: {result.final_result}")
             if result.error_message:
                 print(f"Reason: {result.error_message}")
+            if not result.compile_passed:
+                print(f"Compile log: {result.compile_log_path.relative_to(project_root)}")
+                print(f"Verilator return code: {result.compile_return_code}")
+                if result.primary_error:
+                    print(f"Primary error: {result.primary_error}")
+                print("Full compiler output is saved in the compile log.")
             return 0 if result.final_result == "PASS" else 1
     except Exception as exc:
         print(f"RTL command failed: {exc}")

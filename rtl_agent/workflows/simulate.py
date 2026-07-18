@@ -29,6 +29,8 @@ class FunctionalVerificationResult:
     simulation_log_path: Path
     report_path: Path
     error_message: str | None
+    compile_return_code: int | None
+    primary_error: str | None
 
 
 def _process_log(command: list[str], return_code: int | None, stdout: str, stderr: str) -> str:
@@ -37,6 +39,15 @@ def _process_log(command: list[str], return_code: int | None, stdout: str, stder
         f"Command: {rendered}\nReturn code: {return_code}\n\n"
         f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}\n"
     )
+
+
+def _primary_diagnostics(stderr: str, limit: int = 3) -> str | None:
+    diagnostics = [
+        line.strip() for line in stderr.splitlines()
+        if line.lstrip().startswith(("%Error", "%Warning"))
+        or "No such file or directory" in line
+    ]
+    return " | ".join(diagnostics[:limit]) or None
 
 
 def simulate_design(
@@ -59,6 +70,11 @@ def simulate_design(
     compile_command: list[str] = []
     run_command: list[str] = []
     executable_path: str | None = None
+    compile_stdout = ""
+    compile_stderr = ""
+    run_stdout = ""
+    run_stderr = ""
+    primary_error: str | None = None
     rtl_path = safe_run_path(runs_root, Path(design_name) / "rtl/unknown.sv")
     tb_path = safe_run_path(runs_root, Path(design_name) / "tb/unknown.sv")
     build_path = safe_run_path(runs_root, Path(design_name) / "build/verilator")
@@ -109,6 +125,11 @@ def simulate_design(
         run_command = result.run_command
         executable_path = result.executable_path
         error_message = result.failure_reason
+        compile_stdout = result.compile_stdout
+        compile_stderr = result.compile_stderr
+        run_stdout = result.run_stdout
+        run_stderr = result.run_stderr
+        primary_error = _primary_diagnostics(result.compile_stderr)
         write_text(
             compile_log_path,
             _process_log(result.compile_command, result.compile_return_code,
@@ -143,6 +164,11 @@ def simulate_design(
             "simulation_log_path": str(run_log_path.relative_to(runs_root)),
             "build_directory": str(build_path.relative_to(runs_root)),
             "executable_path": executable_path,
+            "compile_stdout": compile_stdout,
+            "compile_stderr": compile_stderr,
+            "run_stdout": run_stdout,
+            "run_stderr": run_stderr,
+            "primary_error": primary_error,
             "error_message": error_message,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
@@ -153,5 +179,6 @@ def simulate_design(
     return FunctionalVerificationResult(
         design_name, dut_top_module, tb_top_module, compile_passed,
         simulation_passed, final_result, rtl_path, tb_path, compile_log_path,
-        run_log_path, report_path, error_message,
+        run_log_path, report_path, error_message, compile_return_code,
+        primary_error,
     )

@@ -67,6 +67,7 @@ class SimulateWorkflowTests(unittest.TestCase):
         result = simulate_design(self.design, self.root, self.runner(False, False))
         self.assertFalse(result.compile_passed)
         self.assertEqual(result.final_result, "FAIL")
+        self.assertEqual(result.compile_return_code, 1)
 
     def test_simulation_failure(self) -> None:
         result = simulate_design(self.design, self.root, self.runner(True, False))

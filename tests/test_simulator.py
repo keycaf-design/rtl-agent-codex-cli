@@ -71,6 +71,17 @@ class SimulatorTests(unittest.TestCase):
         with self.assertRaises(SimulatorNotFoundError):
             run_verilator_simulation(self.rtl, self.tb, "demo_tb", self.build)
 
+    @patch(
+        "rtl_agent.tools.simulator.shutil.which",
+        side_effect=lambda executable: (
+            "/usr/bin/verilator" if executable == "verilator" else None
+        ),
+    )
+    def test_cpp_compiler_missing(self, _which: Mock) -> None:
+        with patch.dict("rtl_agent.tools.simulator.os.environ", {}, clear=True):
+            with self.assertRaisesRegex(SimulatorNotFoundError, "C\\+\\+ compiler"):
+                run_verilator_simulation(self.rtl, self.tb, "demo_tb", self.build)
+
     @patch("rtl_agent.tools.simulator.subprocess.run")
     @patch("rtl_agent.tools.simulator.shutil.which", return_value="verilator")
     def test_compile_timeout(self, _which: Mock, run: Mock) -> None:
@@ -98,6 +109,7 @@ class SimulatorTests(unittest.TestCase):
         result, mocked = self._run()
         self.assertFalse(stale.exists())
         self.assertEqual(result.compile_command[:4], ["verilator", "--binary", "--timing", "--Wall"])
+        self.assertIn("-Wno-fatal", result.compile_command)
         self.assertIn("--Mdir", result.compile_command)
         self.assertEqual(mocked.call_count, 2)
 
