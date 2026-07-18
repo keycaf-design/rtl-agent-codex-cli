@@ -1,0 +1,9 @@
+{
+  "design_name": "counter",
+  "top_module": "counter",
+  "rtl_filename": "counter.sv",
+  "tb_filename": "counter_tb.sv",
+  "spec_file": "spec.md",
+  "testplan_file": "testplan.md",
+  "max_repair_attempts": 3
+}
