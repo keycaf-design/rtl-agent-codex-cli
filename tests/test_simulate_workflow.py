@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -47,6 +48,7 @@ class SimulateWorkflowTests(unittest.TestCase):
         self.tb.parent.mkdir(parents=True)
         self.rtl.write_text("module demo; endmodule\n", encoding="utf-8")
         self.tb.write_text("module demo_tb; demo dut(); endmodule\n", encoding="utf-8")
+        self.write_approved_audit()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -57,6 +59,18 @@ class SimulateWorkflowTests(unittest.TestCase):
 
     def runner(self, compile_passed: bool, simulation_passed: bool):
         return lambda *_args: simulation_result(compile_passed, simulation_passed)
+
+    def write_approved_audit(self, **overrides) -> None:
+        report = {
+            "schema_valid": True,
+            "decision": "APPROVE",
+            "tb_path": "runs/demo/tb/demo_tb.sv",
+            "tb_sha256": hashlib.sha256(self.tb.read_bytes()).hexdigest(),
+        }
+        report.update(overrides)
+        path = self.root / "runs/demo/reports/tb_audit.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report), encoding="utf-8")
 
     def test_full_pass(self) -> None:
         result = simulate_design(self.design, self.root, self.runner(True, True))
@@ -88,6 +102,85 @@ class SimulateWorkflowTests(unittest.TestCase):
         self.assertEqual(result.final_result, "FAIL")
         report = json.loads(self.report_path.read_text())
         self.assertEqual(report["error_message"], "simulator broke")
+
+    def test_missing_audit_blocks_runner_and_prints_rerun_command(self) -> None:
+        (self.root / "runs/demo/reports/tb_audit.json").unlink()
+        calls = 0
+
+        def runner(*_args):
+            nonlocal calls
+            calls += 1
+            return simulation_result(True, True)
+
+        result = simulate_design(self.design, self.root, runner)
+        self.assertEqual(calls, 0)
+        self.assertIn("python3 main.py audit-tb --design designs/demo",
+                      result.error_message or "")
+        self.assertFalse(json.loads(self.report_path.read_text())["tb_audit_gate_passed"])
+
+    def test_rejected_audit_blocks_runner(self) -> None:
+        self.write_approved_audit(decision="REJECT")
+        calls = 0
+
+        def runner(*_args):
+            nonlocal calls
+            calls += 1
+            return simulation_result(True, True)
+
+        result = simulate_design(self.design, self.root, runner)
+        self.assertEqual(calls, 0)
+        self.assertIn("not APPROVE", result.error_message or "")
+
+    def test_invalid_audit_schema_blocks_runner(self) -> None:
+        self.write_approved_audit(schema_valid=False)
+        calls = 0
+
+        def runner(*_args):
+            nonlocal calls
+            calls += 1
+            return simulation_result(True, True)
+
+        result = simulate_design(self.design, self.root, runner)
+        self.assertEqual(calls, 0)
+        self.assertIn("schema is not valid", result.error_message or "")
+
+    def test_changed_testbench_hash_blocks_runner(self) -> None:
+        self.tb.write_text(self.tb.read_text() + "// changed\n", encoding="utf-8")
+        calls = 0
+
+        def runner(*_args):
+            nonlocal calls
+            calls += 1
+            return simulation_result(True, True)
+
+        result = simulate_design(self.design, self.root, runner)
+        self.assertEqual(calls, 0)
+        self.assertIn("hash does not match", result.error_message or "")
+
+    def test_different_audited_path_blocks_runner(self) -> None:
+        self.write_approved_audit(tb_path="runs/demo/tb/other.sv")
+        result = simulate_design(
+            self.design, self.root, self.runner(True, True)
+        )
+        self.assertFalse(result.compile_passed)
+        self.assertIn("path does not match", result.error_message or "")
+
+    def test_structured_testplan_requires_runtime_markers(self) -> None:
+        (self.design / "testplan.md").write_text("## TP_A\nDrive and check demo.\n")
+        result = simulate_design(self.design, self.root, self.runner(True, True))
+        self.assertFalse(result.simulation_passed)
+        report = json.loads(self.report_path.read_text())
+        self.assertEqual(report["missing_passed_testcase_ids"], ["TP_A"])
+
+    def test_structured_runtime_coverage_passes(self) -> None:
+        (self.design / "testplan.md").write_text("## TP_A\nDrive and check demo.\n")
+        covered = simulation_result(True, True)
+        covered = SimulationResult(**{
+            **covered.__dict__,
+            "run_stdout": "TESTCASE_BEGIN: TP_A\nTESTCASE_PASS: TP_A\nTEST_PASS",
+        })
+        result = simulate_design(self.design, self.root, lambda *_: covered)
+        self.assertTrue(result.simulation_passed)
 
 
 if __name__ == "__main__":

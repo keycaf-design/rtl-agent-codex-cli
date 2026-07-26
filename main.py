@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from rtl_agent.backends.base import ModelBackend
 from rtl_agent.backends.codex_cli import CodexCLIBackend
 from rtl_agent.workflows.generate_rtl import generate_rtl
 from rtl_agent.workflows.generate_testbench import generate_testbench
+from rtl_agent.workflows.audit_testbench import audit_testbench
 from rtl_agent.workflows.repair_simulation import repair_simulation
 from rtl_agent.workflows.simulate import simulate_design
 from rtl_agent.workflows.verify_rtl import verify_rtl
@@ -28,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
         "repair-sim", help="classify and safely repair simulation failures"
     )
     repair_sim.add_argument("--design", required=True, type=Path, help="design input directory")
+    audit_tb = subparsers.add_parser("audit-tb", help="audit semantic testbench coverage")
+    audit_tb.add_argument("--design", required=True, type=Path, help="design input directory")
     return parser
 
 
@@ -55,11 +59,17 @@ def main() -> int:
         if args.command == "generate-tb":
             backend = CodexCLIBackend(project_dir=project_root)
             result = generate_testbench(backend, args.design, project_root)
-            if result.success:
+            print(f"Design: {result.design_name}")
+            print(f"Generation attempts: {result.total_generation_attempts}")
+            print(f"Contract repairs: {result.contract_repair_attempts}")
+            print(f"Testcase contract: {'PASS' if result.testcase_contract_passed else 'FAIL'}")
+            if not result.success:
+                print(f"Existing testbench preserved: {'YES' if result.previous_testbench_preserved else 'NO'}")
+                print(f"Reason: {result.error_message}")
+            else:
                 print(f"Generated testbench: {result.tb_path}")
-                return 0
-            print(f"Testbench generation failed: {result.error_message}")
-            return 1
+            print(f"Final result: {'PASS' if result.success else 'FAIL'}")
+            return 0 if result.success else 1
         if args.command == "simulate":
             result = simulate_design(args.design, project_root)
             print(f"Design: {result.design_name}")
@@ -92,6 +102,22 @@ def main() -> int:
             if result.error_message:
                 print(f"Reason: {result.error_message}")
             return 0 if result.passed else 1
+        if args.command == "audit-tb":
+            try:
+                backend: ModelBackend = CodexCLIBackend(project_dir=project_root)
+            except Exception as exc:
+                initialization_error = str(exc)
+
+                class FailedCodexBackend(ModelBackend):
+                    def generate(self, prompt: str):
+                        del prompt
+                        raise RuntimeError(initialization_error)
+
+                backend = FailedCodexBackend()
+            result = audit_testbench(backend, args.design, project_root)
+            print(f"TB_AUDIT_{result.status}")
+            print(f"report: {result.report_path.relative_to(project_root)}")
+            return result.exit_code
     except Exception as exc:
         print(f"RTL command failed: {exc}")
         return 1
