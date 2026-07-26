@@ -7,6 +7,9 @@ from rtl_agent.backends.base import ModelBackend
 from rtl_agent.backends.codex_cli import CodexCLIBackend
 from rtl_agent.workflows.generate_rtl import generate_rtl
 from rtl_agent.workflows.generate_testbench import generate_testbench
+from rtl_agent.workflows.generate_verified_testbench import (
+    generate_verified_testbench,
+)
 from rtl_agent.workflows.audit_testbench import audit_testbench
 from rtl_agent.workflows.repair_simulation import repair_simulation
 from rtl_agent.workflows.simulate import simulate_design
@@ -24,6 +27,13 @@ def build_parser() -> argparse.ArgumentParser:
         "generate-tb", help="generate a self-checking testbench"
     )
     generate_tb.add_argument("--design", required=True, type=Path, help="design input directory")
+    generate_tb_verified = subparsers.add_parser(
+        "generate-tb-verified",
+        help="generate, independently audit, and approve a testbench",
+    )
+    generate_tb_verified.add_argument(
+        "--design", required=True, type=Path, help="design input directory"
+    )
     simulate = subparsers.add_parser("simulate", help="compile and run RTL simulation")
     simulate.add_argument("--design", required=True, type=Path, help="design input directory")
     repair_sim = subparsers.add_parser(
@@ -70,6 +80,41 @@ def main() -> int:
                 print(f"Generated testbench: {result.tb_path}")
             print(f"Final result: {'PASS' if result.success else 'FAIL'}")
             return 0 if result.success else 1
+        if args.command == "generate-tb-verified":
+            try:
+                generator_backend: ModelBackend = CodexCLIBackend(
+                    project_dir=project_root
+                )
+                auditor_backend: ModelBackend = CodexCLIBackend(
+                    project_dir=project_root
+                )
+            except Exception as exc:
+                initialization_error = str(exc)
+
+                class FailedCodexBackend(ModelBackend):
+                    def generate(self, prompt: str):
+                        del prompt
+                        raise RuntimeError(initialization_error)
+
+                generator_backend = FailedCodexBackend()
+                auditor_backend = FailedCodexBackend()
+            result = generate_verified_testbench(
+                generator_backend,
+                auditor_backend,
+                args.design,
+                project_root,
+            )
+            if result.status == "APPROVED":
+                print("TB_VERIFIED_APPROVE")
+                print(f"attempts: {result.attempts}")
+                print(f"tb: {result.final_tb_path.relative_to(project_root)}")
+            elif result.status == "EXHAUSTED":
+                print("TB_VERIFIED_EXHAUSTED")
+                print(f"attempts: {result.attempts}")
+            else:
+                print("TB_VERIFIED_ERROR")
+            print(f"report: {result.report_path.relative_to(project_root)}")
+            return result.exit_code
         if args.command == "simulate":
             result = simulate_design(args.design, project_root)
             print(f"Design: {result.design_name}")

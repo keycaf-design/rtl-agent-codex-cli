@@ -23,6 +23,7 @@ class DesignConfig:
     testplan_file: str
     max_repair_attempts: int
     max_simulation_repair_attempts: int
+    max_tb_audit_attempts: int
     design_dir: Path
     spec: str
     testplan: str
@@ -71,6 +72,13 @@ def load_design_config(design_dir: Path | str) -> DesignConfig:
         raise DesignConfigError(
             "max_simulation_repair_attempts must be between 0 and 10"
         )
+    audit_attempts = data.get("max_tb_audit_attempts", 3)
+    if isinstance(audit_attempts, bool) or not isinstance(audit_attempts, int):
+        raise DesignConfigError("max_tb_audit_attempts must be an integer")
+    if not 1 <= audit_attempts <= 10:
+        raise DesignConfigError(
+            "max_tb_audit_attempts must be between 1 and 10"
+        )
     tb_top_module = data.get("tb_top_module", Path(filenames["tb_filename"]).stem)
     if not isinstance(tb_top_module, str) or not tb_top_module.strip():
         raise DesignConfigError("tb_top_module must be a non-empty string")
@@ -89,6 +97,7 @@ def load_design_config(design_dir: Path | str) -> DesignConfig:
         tb_top_module=tb_top_module.strip(),
         max_repair_attempts=int(data["max_repair_attempts"]),
         max_simulation_repair_attempts=simulation_repairs,
+        max_tb_audit_attempts=audit_attempts,
         design_dir=directory,
         spec=spec,
         testplan=testplan,

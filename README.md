@@ -34,6 +34,13 @@ RUN_CODEX_TB_AUDIT_INTEGRATION=1 \
   python3 -m unittest tests.test_tb_auditor_integration -v
 ```
 
+Run the opt-in REJECT-to-regeneration integration test:
+
+```bash
+RUN_CODEX_TB_REGEN_INTEGRATION=1 \
+  python3 -m unittest tests.test_tb_regeneration_integration -v
+```
+
 Generate the counter RTL:
 
 ```bash
@@ -50,6 +57,12 @@ Generate a deterministic self-checking testbench from the specification, test pl
 
 ```bash
 python3 main.py generate-tb --design designs/counter
+```
+
+Generate candidates, independently audit each one, and promote only an approved testbench:
+
+```bash
+python3 main.py generate-tb-verified --design designs/counter
 ```
 
 After an approved TB audit, compile the existing RTL and testbench with Verilator `--binary --timing`, then run the generated executable:
@@ -73,6 +86,14 @@ python3 main.py audit-tb --design designs/counter
 Verification requires `verilator` on `PATH`. It first runs `verilator --lint-only --Wall`, then uses the configured model backend to repair the complete RTL when lint fails. Repairs are limited by `max_repair_attempts` in `design.json`. Every full lint output is saved under `runs/<design_name>/logs/`; the final result is written to `runs/<design_name>/reports/verification.json`. Previous RTL revisions are kept under `runs/<design_name>/rtl/history/` before a validated model response replaces the active RTL.
 
 Testbench generation writes `runs/<design_name>/tb/<tb_filename>` and `reports/testbench_generation.json`; replaced testbenches are retained under `tb/history/`. Simulation uses `runs/<design_name>/build/verilator`, writes complete compile and runtime logs under `logs/`, and records `reports/simulation.json`. A simulation passes only when the process exits with code zero, stdout contains `TEST_PASS`, and neither stdout nor stderr contains `TEST_FAIL`.
+
+`generate-tb` retains its original single-command responsibility: it generates and deterministically validates a testbench, then writes it to the active TB path. `generate-tb-verified` adds a separate approval boundary. It stores unapproved candidates under `runs/<design_name>/tb/candidates/tb_attempt_N.sv`, audits each candidate with an independent ephemeral Codex call, and promotes a candidate to the active TB path only after a strict-JSON `APPROVE`.
+
+When an auditor returns `REJECT`, the next generator call receives the original specification and test plan, the complete previous candidate, and the audit summary, findings, missing testcases, unsafe patterns, and required changes. The generator must return a new complete testbench rather than a patch. Consecutive identical candidate hashes terminate as an error. Malformed generation or audit responses also stop immediately instead of being treated as another rejection.
+
+Each attempt writes `reports/tb_attempt_N_generation.json`, `reports/tb_attempt_N_audit.json`, `logs/tb_attempt_N_generation_raw.txt`, and `logs/tb_attempt_N_audit_raw.txt`. The complete loop is summarized in `reports/tb_verified_generation.json`. On failure, inspect these files and the preserved candidates before retrying. `max_tb_audit_attempts` controls the total candidate count, defaults to 3 when absent, and accepts values from 1 through 10.
+
+An approved promotion first preserves an existing active testbench under `tb/history/`, atomically writes the audited candidate to the active path, and installs its approved hash in the canonical `reports/tb_audit.json`. Exhaustion or execution errors leave the previous active TB unchanged and invalidate the canonical audit report, so simulation remains blocked until a later verified generation or `audit-tb` produces a current approval.
 
 `audit-tb` starts a separate Codex CLI invocation from testbench generation. Every backend call launches a new `codex exec --ephemeral` process in the read-only sandbox. The auditor receives the design name, DUT module declaration, complete `spec.md`, complete `testplan.md`, complete testbench, testbench path, and SHA-256 hash. It does not receive the RTL implementation body and cannot edit the testbench. The exact model response is saved at `runs/<design_name>/logs/tb_audit_raw.txt`; the validated result is saved at `runs/<design_name>/reports/tb_audit.json`.
 
