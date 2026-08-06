@@ -2,6 +2,8 @@
 
 RTL Agent is a Python foundation for turning reusable design specifications into synthesizable SystemVerilog through a model backend. The current first stage connects to Codex CLI and extracts one requested top module into a controlled run directory.
 
+This app is vibe coded.
+
 ## Areas and layout
 
 - `rtl_agent/`: reusable backend, loader, prompt, parsing, file, and workflow code. It contains no counter-specific behavior.
